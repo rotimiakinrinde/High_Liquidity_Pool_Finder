@@ -25,8 +25,11 @@ st.set_page_config(
 # ==========================
 # CACHE DIRECTORIES
 # ==========================
-CACHE_DIR = "cache"
-DATA_DIR = "data"
+# Get the directory where this script is located
+script_dir = os.path.dirname(os.path.abspath(__file__))
+
+CACHE_DIR = os.path.join(script_dir, "cache")
+DATA_DIR = os.path.join(script_dir, "data")
 os.makedirs(CACHE_DIR, exist_ok=True)
 os.makedirs(DATA_DIR, exist_ok=True)
 
@@ -40,8 +43,20 @@ DEFILLAMA_CACHE = os.path.join(CACHE_DIR, "defillama_streamlit_cache.csv")
 def load_refined_data():
     """Load pre-processed data from CSV files - prioritize full refined data"""
     
-    # Prioritize full refined data first
+    # Get the directory where this script is located
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    # Define possible paths - both relative to script and absolute
     possible_paths = [
+        # Relative to script location (database folder)
+        os.path.join(script_dir, "data", "uniswap_v3_full_refined.csv"),
+        os.path.join(script_dir, "data", "uniswap_v3_top100_pools.csv"),
+        
+        # In case we're running from root directory
+        os.path.join(script_dir, "..", "database", "data", "uniswap_v3_full_refined.csv"),
+        os.path.join(script_dir, "..", "database", "data", "uniswap_v3_top100_pools.csv"),
+        
+        # Original relative paths as fallback
         "data/uniswap_v3_full_refined.csv",
         "../data/uniswap_v3_full_refined.csv", 
         "./data/uniswap_v3_full_refined.csv",
@@ -57,6 +72,7 @@ def load_refined_data():
         if os.path.exists(file_path):
             try:
                 df = pd.read_csv(file_path)
+                st.success(f"✅ Loaded data from: {os.path.basename(file_path)}")
                 if "full_refined" in file_path:
                     return df, "full"
                 else:
@@ -65,8 +81,13 @@ def load_refined_data():
                 st.error(f"Error loading {file_path}: {str(e)}")
                 continue
     
-    # If no files found, show helpful message
+    # Debug information
     st.error("❌ No refined data files found.")
+    st.info(f"Script is running from: {script_dir}")
+    st.info("Looking for files in these locations:")
+    for path in possible_paths[:4]:  # Show first few paths
+        st.write(f"- {path} (exists: {os.path.exists(path)})")
+    
     st.info("""
     **To fix this:**
     1. Make sure you've run the main analyzer script first

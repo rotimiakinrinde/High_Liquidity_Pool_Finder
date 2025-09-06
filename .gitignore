@@ -1,4 +1,3 @@
 lpfnd/
 *.env
 database/app.ipynb
-requirements.txt
