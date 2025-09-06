@@ -1,6 +1,6 @@
 # ==========================
 # UNISWAP V3 HIGH-LIQUIDITY POOL FINDER
-# Enhanced Streamlit Web Application with Beautiful Sidebar
+# Enhanced Streamlit Web Application with Beautiful Sidebar and Search
 # ==========================
 
 import streamlit as st
@@ -94,6 +94,47 @@ def load_refined_data():
     3. Run Streamlit from the same directory as your `data/` folder
     """)
     return pd.DataFrame(), "none"
+
+# ==========================
+# SEARCH FUNCTION
+# ==========================
+def apply_search_filter(df, search_query):
+    """Apply search filter across multiple columns"""
+    if not search_query or search_query.strip() == "":
+        return df
+    
+    search_query = search_query.lower().strip()
+    
+    # Define searchable columns
+    searchable_columns = []
+    
+    # Common column names to search in
+    potential_search_cols = [
+        'trading_pair', 'base', 'target', 'market', 
+        'base_symbol', 'target_symbol', 'pair_name',
+        'symbol', 'name', 'ticker'
+    ]
+    
+    # Add columns that exist in the dataframe
+    for col in potential_search_cols:
+        if col in df.columns:
+            searchable_columns.append(col)
+    
+    if not searchable_columns:
+        return df
+    
+    # Create search mask
+    search_mask = pd.Series([False] * len(df))
+    
+    for col in searchable_columns:
+        try:
+            # Convert to string and search (case-insensitive)
+            col_mask = df[col].astype(str).str.lower().str.contains(search_query, na=False, regex=False)
+            search_mask = search_mask | col_mask
+        except Exception:
+            continue
+    
+    return df[search_mask]
 
 # ==========================
 # MAIN APP
@@ -336,7 +377,7 @@ def main():
     st.sidebar.markdown("""
     <div class="sidebar-header">
         <h2>🎯 Pool Controls</h2>
-        <p>Filter and sort your pools</p>
+        <p>Filter and search your pools</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -368,7 +409,17 @@ def main():
         if st.button("🎯 Clear All", key="clear_all", help="Reset all filters"):
             if 'quick_filter' in st.session_state:
                 del st.session_state.quick_filter
+            # Clear search as well
+            st.session_state.search_input = ""
             st.rerun()
+
+    # Token Search Filter - positioned right above minimum volume
+    search_query = st.sidebar.text_input(
+        "🔍 Token Search",
+        placeholder="Search pools by symbol, pair, market...",
+        help="Search across trading pairs, symbols, and market names. Try 'USDT', 'ETH', 'Binance', etc.",
+        key="search_input"
+    )
 
     # Volume filter with enhanced styling
     min_volume = st.sidebar.number_input(
@@ -526,8 +577,15 @@ def main():
         </div>
         """.format(avg_liquidity), unsafe_allow_html=True)
     
-    # Apply all filters with enhanced logic
+    # Apply all filters with enhanced logic including search
     filtered_df = df.copy()
+    
+    # Apply search filter first
+    if search_query and search_query.strip():
+        filtered_df = apply_search_filter(filtered_df, search_query)
+        if len(filtered_df) == 0:
+            st.warning(f"🔍 No pools found matching '{search_query}'. Try a different search term or clear the search.")
+            return
     
     # Apply volume filter
     if min_volume > 0 and 'volume_usd' in filtered_df.columns:
@@ -589,6 +647,10 @@ def main():
         except Exception:
             pass
     
+    # Show search summary if search is active
+    if search_query and search_query.strip():
+        st.info(f"🔍 **Search Results:** Showing {len(filtered_df):,} pools matching '{search_query}' (from {len(df):,} total pools)")
+    
     # Tabs
     tab1, tab2, tab3 = st.tabs(["📊 Data Table", "🔝 Top Performers", "📈 Analytics Charts"])
     
@@ -605,18 +667,28 @@ def main():
             # Rename volume_formatted column to Volume($) for display
             if 'volume_formatted' in display_df.columns:
                 display_df = display_df.rename(columns={'volume_formatted': 'Volume($)'})
-            st.dataframe(display_df, width='stretch', height=500)
+            st.dataframe(display_df, use_container_width=True, height=500)
             
             # Download button
             csv = display_df.to_csv(index=False)
+            filename_suffix = f"_search_{search_query.replace(' ', '_')}" if search_query else ""
             st.download_button(
                 label="📥 Download CSV",
                 data=csv,
-                file_name=f"uniswap_pools_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                file_name=f"uniswap_pools{filename_suffix}_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
                 mime="text/csv"
             )
         else:
-            st.warning("No pools match the current filters. Try adjusting your criteria.")
+            if search_query and search_query.strip():
+                st.warning(f"🔍 No pools found matching '{search_query}'. Try:")
+                st.markdown("""
+                - Using shorter search terms (e.g., 'USDT' instead of 'USDT/ETH')
+                - Checking spelling
+                - Trying different token symbols
+                - Clearing other filters that might be too restrictive
+                """)
+            else:
+                st.warning("No pools match the current filters. Try adjusting your criteria.")
     
     with tab2:
         st.subheader("🔝 Top Performing Pools")
@@ -631,7 +703,7 @@ def main():
                     top_volume = filtered_df.nlargest(10, 'volume_usd')[top_volume_cols]
                     if 'volume_formatted' in top_volume.columns:
                         top_volume = top_volume.rename(columns={'volume_formatted': 'Volume($)'})
-                    st.dataframe(top_volume, width='stretch')
+                    st.dataframe(top_volume, use_container_width=True)
             
             with col_b:
                 st.write("**⭐ Highest Liquidity Score Pools**")
@@ -641,7 +713,7 @@ def main():
                     top_liquidity = filtered_df.nlargest(10, 'liquidity_score')[top_liquidity_cols]
                     if 'volume_formatted' in top_liquidity.columns:
                         top_liquidity = top_liquidity.rename(columns={'volume_formatted': 'Volume($)'})
-                    st.dataframe(top_liquidity, width='stretch')
+                    st.dataframe(top_liquidity, use_container_width=True)
             
             if 'bid_ask_spread' in filtered_df.columns and filtered_df['bid_ask_spread'].max() > 0:
                 st.write("**🎯 Tightest Spreads Pools**")
@@ -650,7 +722,7 @@ def main():
                 tight_spreads = filtered_df[filtered_df['bid_ask_spread'] > 0].nsmallest(10, 'bid_ask_spread')[tight_spreads_cols]
                 if 'volume_formatted' in tight_spreads.columns:
                     tight_spreads = tight_spreads.rename(columns={'volume_formatted': 'Volume($)'})
-                st.dataframe(tight_spreads, width='stretch')
+                st.dataframe(tight_spreads, use_container_width=True)
         else:
             st.warning("No data available for top performers with current filters.")
     
