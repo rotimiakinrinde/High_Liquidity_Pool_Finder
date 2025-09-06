@@ -72,7 +72,6 @@ def load_refined_data():
         if os.path.exists(file_path):
             try:
                 df = pd.read_csv(file_path)
-                st.success(f"✅ Loaded data from: {os.path.basename(file_path)}")
                 if "full_refined" in file_path:
                     return df, "full"
                 else:
