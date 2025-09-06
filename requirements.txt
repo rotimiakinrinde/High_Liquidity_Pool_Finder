@@ -1,0 +1,14 @@
+streamlit
+pandas
+requests
+python-dotenv
+numpy
+scikit-learn
+sqlalchemy
+matplotlib
+seaborn
+ipywidgets
+joblib
+aiohttp
+plotly
+networkx
